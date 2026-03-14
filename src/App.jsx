@@ -56,7 +56,6 @@ export default function App() {
   // State Loading Global
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Listener Autentikasi
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
@@ -64,7 +63,6 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Listener Scroll untuk Navbar
   useEffect(() => {
     const handleScroll = () => {
       setIsScrolled(window.scrollY > 50);
@@ -73,22 +71,21 @@ export default function App() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Fetch Data dari Firestore
   useEffect(() => {
     const qKegiatan = query(collection(db, 'kegiatan'), orderBy('createdAt', 'desc'));
     const unsubKegiatan = onSnapshot(qKegiatan, (snapshot) => {
       setKegiatans(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
+    }, (err) => console.error("Kegiatan error:", err));
 
     const qPengurus = query(collection(db, 'pengurus'), orderBy('urutan', 'asc'));
     const unsubPengurus = onSnapshot(qPengurus, (snapshot) => {
       setPengurus(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
+    }, (err) => console.error("Pengurus error:", err));
 
     const qLibrary = query(collection(db, 'elibrary'), orderBy('createdAt', 'desc'));
     const unsubLibrary = onSnapshot(qLibrary, (snapshot) => {
       setElibrary(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
+    }, (err) => console.error("Library error:", err));
 
     return () => {
       unsubKegiatan();
@@ -216,7 +213,6 @@ export default function App() {
 // ==========================================
 
 function HomeView({ kegiatans, navigateTo }) {
-  const latestKegiatan = kegiatans.slice(0, 3);
   return (
     <div className="animate-in fade-in duration-500">
       <div className="relative h-screen flex items-center justify-center overflow-hidden bg-zinc-900">
@@ -309,19 +305,19 @@ function LoginView({ navigateTo }) {
       await signInWithEmailAndPassword(auth, email, password);
       navigateTo('admin');
     } catch (err) {
-      alert('Login Gagal');
+      alert('Login Gagal. Cek kembali Email/Password anda.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-zinc-100">
       <form onSubmit={handleLogin} className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-md">
         <h2 className="text-2xl font-black mb-6 text-center">Admin Login</h2>
-        <input type="email" placeholder="Email" className="w-full p-4 mb-4 rounded-2xl border bg-zinc-50" value={email} onChange={(e) => setEmail(e.target.value)} required />
-        <input type="password" placeholder="Password" className="w-full p-4 mb-6 rounded-2xl border bg-zinc-50" value={password} onChange={(e) => setPassword(e.target.value)} required />
-        <button type="submit" disabled={loading} className="w-full bg-[#008000] text-white p-4 rounded-2xl font-black">
+        <input type="email" placeholder="Email" className="w-full p-4 mb-4 rounded-2xl border bg-zinc-50 focus:ring-2 focus:ring-[#008000]" value={email} onChange={(e) => setEmail(e.target.value)} required />
+        <input type="password" placeholder="Password" className="w-full p-4 mb-6 rounded-2xl border bg-zinc-50 focus:ring-2 focus:ring-[#008000]" value={password} onChange={(e) => setPassword(e.target.value)} required />
+        <button type="submit" disabled={loading} className="w-full bg-[#008000] text-white p-4 rounded-2xl font-black transition-transform active:scale-95 disabled:opacity-50">
           {loading ? 'Masuk...' : 'Login'}
         </button>
       </form>
@@ -330,47 +326,62 @@ function LoginView({ navigateTo }) {
 }
 
 // ==========================================
-// 4. ADMIN PANEL (FULL IMPLEMENTATION)
+// 4. ADMIN PANEL (PROTECTED & IMPROVED)
 // ==========================================
 
 function AdminView({ user, kegiatans, pengurus, elibrary, setIsProcessing, navigateTo }) {
   const [adminTab, setAdminTab] = useState('kegiatan');
 
   const uploadFile = async (file) => {
-    if (!file) return null;
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('upload_preset', 'hmi-preset');
-    const res = await fetch('https://api.cloudinary.com/v1_1/ddmlepyin/image/upload', {
-      method: 'POST',
-      body: formData
-    });
-    const data = await res.json();
-    return data.secure_url;
+    try {
+      if (!file) return null;
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('upload_preset', 'hmi-preset'); // Ganti dengan preset Cloudinary anda
+      
+      const res = await fetch('https://api.cloudinary.com/v1_1/ddmlepyin/image/upload', {
+        method: 'POST',
+        body: formData
+      });
+      
+      const resData = await res.json();
+      if (!resData.secure_url) {
+        throw new Error(resData.error?.message || "Gagal mendapatkan link foto dari Cloudinary");
+      }
+      return resData.secure_url;
+    } catch (err) {
+      console.error("Cloudinary Upload Error:", err);
+      return null;
+    }
   };
 
   return (
     <div className="pt-32 pb-24 max-w-7xl mx-auto px-4">
       <div className="flex justify-between items-center mb-8">
-        <h2 className="text-3xl font-black">Admin Panel</h2>
-        <button onClick={() => signOut(auth)} className="bg-red-50 text-red-600 px-6 py-2 rounded-xl font-bold">Logout</button>
+        <div>
+          <h2 className="text-3xl font-black">Admin Panel</h2>
+          <p className="text-zinc-500 text-sm">Masuk sebagai: {user.email}</p>
+        </div>
+        <button onClick={() => { signOut(auth); navigateTo('home'); }} className="bg-red-50 text-red-600 px-6 py-2 rounded-xl font-bold hover:bg-red-100 transition">Logout</button>
       </div>
       
-      <div className="flex space-x-4 mb-8 overflow-x-auto pb-2">
+      <div className="flex space-x-4 mb-8 overflow-x-auto pb-2 scrollbar-hide">
         {['kegiatan', 'pengurus', 'elibrary'].map(t => (
           <button 
             key={t} 
             onClick={() => setAdminTab(t)}
-            className={`px-6 py-3 rounded-2xl font-black capitalize ${adminTab === t ? 'bg-[#008000] text-white' : 'bg-white border'}`}
+            className={`px-6 py-3 rounded-2xl font-black capitalize transition-all whitespace-nowrap ${adminTab === t ? 'bg-[#008000] text-white shadow-lg scale-105' : 'bg-white border text-zinc-600 hover:bg-zinc-50'}`}
           >
             {t}
           </button>
         ))}
       </div>
 
-      {adminTab === 'kegiatan' && <ManageKegiatan data={kegiatans} uploadFile={uploadFile} setIsProcessing={setIsProcessing} />}
-      {adminTab === 'pengurus' && <ManagePengurus data={pengurus} uploadFile={uploadFile} setIsProcessing={setIsProcessing} />}
-      {adminTab === 'elibrary' && <ManageELibrary data={elibrary} setIsProcessing={setIsProcessing} />}
+      <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
+        {adminTab === 'kegiatan' && <ManageKegiatan data={kegiatans} uploadFile={uploadFile} setIsProcessing={setIsProcessing} />}
+        {adminTab === 'pengurus' && <ManagePengurus data={pengurus} uploadFile={uploadFile} setIsProcessing={setIsProcessing} />}
+        {adminTab === 'elibrary' && <ManageELibrary data={elibrary} setIsProcessing={setIsProcessing} />}
+      </div>
     </div>
   );
 }
@@ -384,12 +395,27 @@ function ManageKegiatan({ data, uploadFile, setIsProcessing }) {
 
   const submit = async (e) => {
     e.preventDefault();
+    if (!file && !form.id) return alert("Pilih foto terlebih dahulu!");
+    
     setIsProcessing(true);
     try {
-      let url = form.id ? data.find(d => d.id === form.id).imgUrl : '';
-      if (file) url = await uploadFile(file);
+      // Logic URL Photo
+      let url = form.id ? (data.find(d => d.id === form.id)?.imgUrl || '') : '';
       
-      const payload = { ...form, imgUrl: url, updatedAt: new Date().toISOString() };
+      if (file) {
+        const uploadedUrl = await uploadFile(file);
+        if (!uploadedUrl) throw new Error("Gagal upload foto. Pastikan koneksi stabil.");
+        url = uploadedUrl;
+      }
+      
+      const payload = { 
+        judul: form.judul,
+        tanggal: form.tanggal,
+        deskripsi: form.deskripsi,
+        imgUrl: url,
+        updatedAt: new Date().toISOString() 
+      };
+
       if (form.id) {
         await updateDoc(doc(db, 'kegiatan', form.id), payload);
       } else {
@@ -397,31 +423,53 @@ function ManageKegiatan({ data, uploadFile, setIsProcessing }) {
         await addDoc(collection(db, 'kegiatan'), payload);
       }
       reset();
+      alert("Data Kegiatan berhasil disimpan!");
+    } catch (e) { 
+      alert("Error: " + e.message); 
+    } finally { 
+      setIsProcessing(false); 
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("Yakin ingin menghapus kegiatan ini?")) return;
+    setIsProcessing(true);
+    try {
+      await deleteDoc(doc(db, 'kegiatan', id));
     } catch (e) { alert(e.message); }
     finally { setIsProcessing(false); }
   };
 
   return (
     <div className="grid md:grid-cols-3 gap-8">
-      <form onSubmit={submit} className="bg-white p-6 rounded-3xl border space-y-4 h-fit">
-        <input placeholder="Judul" className="w-full p-3 border rounded-xl" value={form.judul} onChange={e => setForm({...form, judul: e.target.value})} required />
-        <input placeholder="Tanggal" className="w-full p-3 border rounded-xl" value={form.tanggal} onChange={e => setForm({...form, tanggal: e.target.value})} required />
-        <textarea placeholder="Deskripsi" className="w-full p-3 border rounded-xl" value={form.deskripsi} onChange={e => setForm({...form, deskripsi: e.target.value})} required />
-        <input type="file" onChange={e => setFile(e.target.files[0])} />
-        <div className="flex gap-2">
-          <button type="submit" className="flex-1 bg-black text-white p-3 rounded-xl font-bold">Simpan</button>
-          <button type="button" onClick={reset} className="p-3 bg-zinc-100 rounded-xl">Reset</button>
+      <form onSubmit={submit} className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm space-y-4 h-fit sticky top-32">
+        <h3 className="font-black text-lg border-b pb-2 mb-4">{form.id ? 'Edit' : 'Tambah'} Kegiatan</h3>
+        <input placeholder="Judul" className="w-full p-3 border rounded-xl focus:ring-2 focus:ring-green-500" value={form.judul} onChange={e => setForm({...form, judul: e.target.value})} required />
+        <input placeholder="Tanggal (Contoh: 12 Jan 2024)" className="w-full p-3 border rounded-xl focus:ring-2 focus:ring-green-500" value={form.tanggal} onChange={e => setForm({...form, tanggal: e.target.value})} required />
+        <textarea placeholder="Deskripsi Singkat" className="w-full p-3 border rounded-xl focus:ring-2 focus:ring-green-500 h-32" value={form.deskripsi} onChange={e => setForm({...form, deskripsi: e.target.value})} required />
+        <div className="space-y-1">
+          <p className="text-xs font-bold text-zinc-500">Pilih Foto (Upload Cloudinary)</p>
+          <input type="file" accept="image/*" onChange={e => setFile(e.target.files[0])} className="text-sm w-full" />
+        </div>
+        <div className="flex gap-2 pt-2">
+          <button type="submit" className="flex-1 bg-[#008000] text-white p-3 rounded-xl font-bold hover:bg-green-700 transition">Simpan</button>
+          <button type="button" onClick={reset} className="p-3 bg-zinc-100 rounded-xl hover:bg-zinc-200 text-zinc-600 transition">Reset</button>
         </div>
       </form>
+
       <div className="md:col-span-2 space-y-4">
+        {data.length === 0 && <p className="text-zinc-400 text-center py-10 italic">Belum ada data kegiatan.</p>}
         {data.map(item => (
-          <div key={item.id} className="bg-white p-4 rounded-3xl border flex items-center gap-4">
-            <img src={item.imgUrl} className="w-20 h-20 object-cover rounded-xl" alt="" />
+          <div key={item.id} className="bg-white p-4 rounded-3xl border border-zinc-100 flex items-center gap-4 hover:shadow-md transition group">
+            <img src={item.imgUrl} className="w-20 h-20 object-cover rounded-2xl shadow-inner bg-zinc-100" alt="" />
             <div className="flex-1">
-              <h4 className="font-bold">{item.judul}</h4>
+              <h4 className="font-bold text-zinc-800 leading-tight">{item.judul}</h4>
+              <p className="text-xs text-zinc-400 mt-1">{item.tanggal}</p>
             </div>
-            <button onClick={() => setForm(item)} className="p-2 text-blue-600"><Edit3 /></button>
-            <button onClick={() => deleteDoc(doc(db, 'kegiatan', item.id))} className="p-2 text-red-600"><Trash2 /></button>
+            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition">
+              <button onClick={() => setForm(item)} className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg"><Edit3 className="w-5 h-5" /></button>
+              <button onClick={() => handleDelete(item.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="w-5 h-5" /></button>
+            </div>
           </div>
         ))}
       </div>
@@ -438,42 +486,75 @@ function ManagePengurus({ data, uploadFile, setIsProcessing }) {
 
   const submit = async (e) => {
     e.preventDefault();
+    if (!file && !form.id) return alert("Pilih foto pengurus!");
+    
     setIsProcessing(true);
     try {
-      let url = form.id ? data.find(d => d.id === form.id).imgUrl : '';
-      if (file) url = await uploadFile(file);
+      let url = form.id ? (data.find(d => d.id === form.id)?.imgUrl || '') : '';
       
-      const payload = { ...form, urutan: Number(form.urutan), imgUrl: url };
+      if (file) {
+        const uploadedUrl = await uploadFile(file);
+        if (!uploadedUrl) throw new Error("Gagal upload foto pengurus.");
+        url = uploadedUrl;
+      }
+      
+      const payload = { 
+        nama: form.nama,
+        jabatan: form.jabatan,
+        urutan: Number(form.urutan), 
+        imgUrl: url 
+      };
+
       if (form.id) {
         await updateDoc(doc(db, 'pengurus', form.id), payload);
       } else {
         await addDoc(collection(db, 'pengurus'), payload);
       }
       reset();
+      alert("Data Pengurus tersimpan!");
+    } catch (e) { alert("Error: " + e.message); }
+    finally { setIsProcessing(false); }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("Hapus pengurus ini?")) return;
+    setIsProcessing(true);
+    try {
+      await deleteDoc(doc(db, 'pengurus', id));
     } catch (e) { alert(e.message); }
     finally { setIsProcessing(false); }
   };
 
   return (
     <div className="grid md:grid-cols-3 gap-8">
-      <form onSubmit={submit} className="bg-white p-6 rounded-3xl border space-y-4 h-fit">
-        <input placeholder="Nama" className="w-full p-3 border rounded-xl" value={form.nama} onChange={e => setForm({...form, nama: e.target.value})} required />
+      <form onSubmit={submit} className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm space-y-4 h-fit sticky top-32">
+        <h3 className="font-black text-lg border-b pb-2 mb-4">Data Pengurus</h3>
+        <input placeholder="Nama Lengkap" className="w-full p-3 border rounded-xl" value={form.nama} onChange={e => setForm({...form, nama: e.target.value})} required />
         <input placeholder="Jabatan" className="w-full p-3 border rounded-xl" value={form.jabatan} onChange={e => setForm({...form, jabatan: e.target.value})} required />
-        <input type="number" placeholder="Urutan" className="w-full p-3 border rounded-xl" value={form.urutan} onChange={e => setForm({...form, urutan: e.target.value})} required />
-        <input type="file" onChange={e => setFile(e.target.files[0])} />
-        <button type="submit" className="w-full bg-black text-white p-3 rounded-xl font-bold">Simpan Pengurus</button>
-        {form.id && <button type="button" onClick={reset} className="w-full p-3 text-zinc-500">Batal Edit</button>}
+        <div className="space-y-1">
+          <p className="text-xs font-bold text-zinc-500">Nomor Urutan (Untuk Sorting)</p>
+          <input type="number" className="w-full p-3 border rounded-xl" value={form.urutan} onChange={e => setForm({...form, urutan: e.target.value})} required />
+        </div>
+        <div className="space-y-1">
+          <p className="text-xs font-bold text-zinc-500">Upload Foto</p>
+          <input type="file" accept="image/*" onChange={e => setFile(e.target.files[0])} className="text-sm w-full" />
+        </div>
+        <button type="submit" className="w-full bg-[#008000] text-white p-3 rounded-xl font-bold hover:bg-green-700 transition">Simpan Pengurus</button>
+        {form.id && <button type="button" onClick={reset} className="w-full p-2 text-zinc-500 text-sm hover:underline">Batal Edit</button>}
       </form>
+
       <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
         {data.map(item => (
-          <div key={item.id} className="bg-white p-4 rounded-3xl border flex items-center gap-4">
-            <img src={item.imgUrl} className="w-12 h-12 object-cover rounded-full" alt="" />
-            <div className="flex-1">
-              <h4 className="font-bold text-sm">{item.nama}</h4>
-              <p className="text-xs text-zinc-500">{item.jabatan}</p>
+          <div key={item.id} className="bg-white p-4 rounded-3xl border border-zinc-100 flex items-center gap-4 group hover:border-green-200 transition shadow-sm">
+            <img src={item.imgUrl} className="w-14 h-14 object-cover rounded-full bg-zinc-50" alt="" />
+            <div className="flex-1 overflow-hidden">
+              <h4 className="font-bold text-sm truncate">{item.nama}</h4>
+              <p className="text-xs text-[#008000] font-bold uppercase">{item.jabatan}</p>
             </div>
-            <button onClick={() => setForm(item)} className="p-2 text-blue-600"><Edit3 className="w-4 h-4" /></button>
-            <button onClick={() => deleteDoc(doc(db, 'pengurus', item.id))} className="p-2 text-red-600"><Trash2 className="w-4 h-4" /></button>
+            <div className="flex gap-1">
+              <button onClick={() => setForm(item)} className="p-2 text-blue-500"><Edit3 className="w-4 h-4" /></button>
+              <button onClick={() => handleDelete(item.id)} className="p-2 text-red-500"><Trash2 className="w-4 h-4" /></button>
+            </div>
           </div>
         ))}
       </div>
@@ -491,35 +572,59 @@ function ManageELibrary({ data, setIsProcessing }) {
     e.preventDefault();
     setIsProcessing(true);
     try {
+      const payload = { 
+        judul: form.judul,
+        deskripsi: form.deskripsi,
+        link: form.link,
+        updatedAt: new Date().toISOString()
+      };
+
       if (form.id) {
-        await updateDoc(doc(db, 'elibrary', form.id), form);
+        await updateDoc(doc(db, 'elibrary', form.id), payload);
       } else {
-        const payload = { ...form, createdAt: new Date().toISOString() };
+        payload.createdAt = new Date().toISOString();
         await addDoc(collection(db, 'elibrary'), payload);
       }
       reset();
+      alert("Dokumen berhasil ditambahkan!");
+    } catch (e) { alert("Error: " + e.message); }
+    finally { setIsProcessing(false); }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("Hapus dokumen ini?")) return;
+    setIsProcessing(true);
+    try {
+      await deleteDoc(doc(db, 'elibrary', id));
     } catch (e) { alert(e.message); }
     finally { setIsProcessing(false); }
   };
 
   return (
     <div className="grid md:grid-cols-3 gap-8">
-      <form onSubmit={submit} className="bg-white p-6 rounded-3xl border space-y-4 h-fit">
+      <form onSubmit={submit} className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm space-y-4 h-fit sticky top-32">
+        <h3 className="font-black text-lg border-b pb-2 mb-4">Input Library</h3>
         <input placeholder="Judul Buku/Dokumen" className="w-full p-3 border rounded-xl" value={form.judul} onChange={e => setForm({...form, judul: e.target.value})} required />
-        <input placeholder="Deskripsi" className="w-full p-3 border rounded-xl" value={form.deskripsi} onChange={e => setForm({...form, deskripsi: e.target.value})} required />
-        <input placeholder="Link Download (URL)" className="w-full p-3 border rounded-xl" value={form.link} onChange={e => setForm({...form, link: e.target.value})} required />
-        <button type="submit" className="w-full bg-black text-white p-4 rounded-xl font-bold">Simpan Dokumen</button>
+        <input placeholder="Deskripsi Singkat" className="w-full p-3 border rounded-xl" value={form.deskripsi} onChange={e => setForm({...form, deskripsi: e.target.value})} required />
+        <input placeholder="Link Google Drive / Download" className="w-full p-3 border rounded-xl" value={form.link} onChange={e => setForm({...form, link: e.target.value})} required />
+        <button type="submit" className="w-full bg-[#008000] text-white p-4 rounded-xl font-bold hover:bg-green-700 transition">Simpan Dokumen</button>
       </form>
-      <div className="md:col-span-2 space-y-4">
+
+      <div className="md:col-span-2 space-y-3">
         {data.map(item => (
-          <div key={item.id} className="bg-white p-4 rounded-3xl border flex items-center justify-between">
-            <div>
-              <h4 className="font-bold">{item.judul}</h4>
-              <p className="text-sm text-zinc-500">{item.deskripsi}</p>
+          <div key={item.id} className="bg-white p-5 rounded-3xl border border-zinc-100 flex items-center justify-between group hover:shadow-md transition">
+            <div className="flex items-center gap-4">
+              <div className="bg-zinc-50 p-3 rounded-2xl">
+                <BookOpen className="text-[#008000] w-6 h-6" />
+              </div>
+              <div>
+                <h4 className="font-bold text-zinc-800">{item.judul}</h4>
+                <p className="text-xs text-zinc-400">{item.deskripsi}</p>
+              </div>
             </div>
-            <div className="flex gap-2">
-              <button onClick={() => setForm(item)} className="p-2 text-blue-600"><Edit3 /></button>
-              <button onClick={() => deleteDoc(doc(db, 'elibrary', item.id))} className="p-2 text-red-600"><Trash2 /></button>
+            <div className="flex gap-1">
+              <button onClick={() => setForm(item)} className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg"><Edit3 className="w-5 h-5" /></button>
+              <button onClick={() => handleDelete(item.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="w-5 h-5" /></button>
             </div>
           </div>
         ))}
